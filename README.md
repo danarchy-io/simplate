@@ -72,5 +72,6 @@ cat data.yaml | simplate --input-schema-file schema.json template.tmpl -
 ## Notes
 
 - Templates should conform to the Go `text/template` format.
+  - You can access the values of environment variables using the `env` function, like this: `{{ env "HOME" }}`.
 - YAML input should be properly structured and optionally validated using a JSON Schema.
 - Use `-` to read input from stdin if the second positional argument is not provided.
