@@ -38,6 +38,13 @@ func Execute() error {
 
 func runE(cmd *cobra.Command, args []string) error {
 
+	if len(args) < 1 {
+		return fmt.Errorf("no template file provided")
+	}
+	if len(args) > 2 {
+		return fmt.Errorf("too many arguments provided")
+	}
+
 	templateFile := args[0] // Template file is the first required arg
 
 	// --- Determine Input Source ---
