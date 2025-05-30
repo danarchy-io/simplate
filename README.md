@@ -69,9 +69,29 @@ cat data.yaml | simplate --input-schema-file schema.json template.tmpl
 cat data.yaml | simplate --input-schema-file schema.json template.tmpl -
 ```
 
+## Template Helper Functions
+
+Simplate makes three extra functions available inside your Go templates:
+
+- **`env`**  
+  Look up an environment variable by name.  
+  Returns the variable’s value or the empty string if unset.
+  ```gotemplate
+  env "VAR_NAME"
+
+- **`envOrDefault`**
+  Look up an environment variable, but fall back to a default if it’s unset or empty.  
+  Signature:  
+  ```gotemplate
+  envOrDefault "VAR_NAME" "defaultValue"
+
+- **`unique`**
+  Remove duplicate entries from a slice (first-occurrence wins). Works on any Go slice of a comparable element type.
+  ```gotemplate
+  unique .SomeList
+
 ## Notes
 
 - Templates should conform to the Go `text/template` format.
-  - You can access the values of environment variables using the `env` function, like this: `{{ env "HOME" }}`.
 - YAML input should be properly structured and optionally validated using a JSON Schema.
 - Use `-` to read input from stdin if the second positional argument is not provided.
