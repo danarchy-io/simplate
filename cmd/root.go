@@ -5,9 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/danarchy-io/simplate/internal/generator"
-	"github.com/danarchy-io/simplate/internal/loader"
-	"github.com/danarchy-io/simplate/internal/validator"
+	"github.com/danarchy-io/simplate/pkg/executor"
 	"github.com/spf13/cobra"
 )
 
@@ -95,26 +93,14 @@ func runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read template file '%s': %w", templateFile, err)
 	}
 
-	input, err := loader.LoadYaml(dataBytes)
-	if err != nil {
-		return fmt.Errorf("failed to load YAML input: %w", err)
-	}
-
 	if inputSchemaFile != "" {
-
 		inputSchemaBytes, err := os.ReadFile(inputSchemaFile)
 		if err != nil {
 			return fmt.Errorf("failed to read schema file '%v': %w", inputSchemaFile, err)
 		}
-
-		if len(inputSchemaBytes) == 0 {
-			return fmt.Errorf("empty input schema file '%v'", inputSchemaFile)
-		}
-
-		if err := validator.ValidateYamlWithSchema(input, inputSchemaBytes); err != nil {
-			return fmt.Errorf("error while validating schema: %w", err)
-		}
+		return executor.Execute(dataBytes, templateBytes, os.Stdout,
+			executor.WithJsonSchemaValidation(inputSchemaBytes))
 	}
 
-	return generator.Generate(input, templateBytes, os.Stdout)
+	return executor.Execute(dataBytes, templateBytes, os.Stdout)
 }
