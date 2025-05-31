@@ -69,6 +69,64 @@ cat data.yaml | simplate --input-schema-file schema.json template.tmpl
 cat data.yaml | simplate --input-schema-file schema.json template.tmpl -
 ```
 
+## Using Simplate as a Library
+
+You can embed Simplate’s core functionality in your own Go programs by calling the `Execute` function from the `executor` package. This lets you render templates with YAML input (and optional JSON-Schema validation) without invoking the CLI.
+
+```go
+import (
+    "bytes"
+    "fmt"
+
+    "github.com/danarchy-io/simplate/pkg/executor"
+)
+
+func main() {
+    // raw YAML input
+    inputYAML := []byte(`
+name: Alice
+age: 30
+`)
+
+    // Go text/template source
+    tmplSrc := []byte("Name: {{.name}}, Age: {{.age}}")
+
+	schema := []byte(`{
+		"type":"object",
+		"properties":{"name":{"type":"string"},"age":{"type":"integer"}},
+		"required":["name", "age"]
+	}`)
+
+    // buffer to capture output
+    var buf bytes.Buffer
+
+    // render
+    err := executor.Execute(inputYAML, tmplSrc, &buf, executor.WithJsonSchemaValidation(schema))
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println(buf.String())
+    // Output: Name: Alice, Age: 30
+}
+```
+
+Function signature:
+
+```go
+func Execute(
+    input     []byte,
+    templ     []byte,
+    output    io.Writer,
+    validateFuncs ...ValidateInputFunc,
+) error
+```
+
+- input: raw YAML bytes to unmarshal.
+- templ: Go text/template source.
+- output: destination for the rendered template (any io.Writer).
+- validateFuncs: zero or more validators, e.g. executor.WithJsonSchemaValidation(schemaBytes).
+
 ## Notes
 
 - Templates should conform to the Go `text/template` format.

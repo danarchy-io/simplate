@@ -1,150 +1,181 @@
 package cmd
 
 import (
-	"errors"
+	"bytes"
 	"io"
 	"os"
-	"strings"
+	"path/filepath"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
-func newTestCmd(args ...string) *cobra.Command {
-	cmd := &cobra.Command{
-		Use: "simplate",
+func TestRunE_Errors(t *testing.T) {
+	origContent := inputContent
+	origSchema := inputSchemaFile
+	cases := []struct {
+		name    string
+		init    func()
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "no args",
+			init:    func() { inputContent, inputSchemaFile = "", "" },
+			args:    []string{},
+			wantErr: "no template file provided",
+		},
+		{
+			name:    "too many args",
+			init:    func() { inputContent, inputSchemaFile = "", "" },
+			args:    []string{"a", "b", "c"},
+			wantErr: "too many arguments provided",
+		},
+		{
+			name: "no data source",
+			init: func() { inputContent, inputSchemaFile = "", "" },
+			// one arg, no content flag, no stdin, no file
+			args:    []string{"tmpl"},
+			wantErr: "no data provided",
+		},
+		{
+			name: "template not found with content flag",
+			init: func() { inputContent, inputSchemaFile = "foo: bar", "" },
+			args: []string{"nonexistent.tmpl"},
+			// the code will try to read the template and fail
+			wantErr: "failed to read template file",
+		},
 	}
-	cmd.SetArgs(args)
-	return cmd
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// restore globals after
+			t.Cleanup(func() {
+				inputContent = origContent
+				inputSchemaFile = origSchema
+			})
+			tc.init()
+			err := runE(nil, tc.args)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			if !bytes.Contains([]byte(err.Error()), []byte(tc.wantErr)) {
+				t.Errorf("error %q does not contain %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
 }
 
-func Test_runE_NoArgs(t *testing.T) {
-	cmd := newTestCmd()
-	err := runE(cmd, []string{})
-	if err == nil || !strings.Contains(err.Error(), "no template file provided") {
-		t.Errorf("expected error for no args, got: %v", err)
-	}
-}
+func TestRunE_ContentFlag_Success(t *testing.T) {
+	origContent := inputContent
+	origSchema := inputSchemaFile
+	t.Cleanup(func() {
+		inputContent = origContent
+		inputSchemaFile = origSchema
+	})
 
-func Test_runE_InputContentFlag(t *testing.T) {
-	inputContent = "foo: bar"
-	defer func() { inputContent = "" }()
-
-	tmp, err := os.CreateTemp("", "tmpl")
-	if err != nil {
+	// prepare template file
+	tmplFile := filepath.Join(t.TempDir(), "tmpl.txt")
+	if err := os.WriteFile(tmplFile, []byte("Hello {{.Name}}"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmp.Name())
-	tmp.WriteString("{{.foo}}")
-	tmp.Close()
+	// set content flag to YAML
+	inputContent = "Name: Alice"
 
-	oldStdout := os.Stdout
+	// capture stdout
+	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	cmd := newTestCmd(tmp.Name())
-	err = runE(cmd, []string{tmp.Name()})
-
+	err := runE(nil, []string{tmplFile})
 	w.Close()
-	os.Stdout = oldStdout
 	out, _ := io.ReadAll(r)
+	os.Stdout = origStdout
 
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Fatalf("runE returned error: %v", err)
 	}
-	if strings.TrimSpace(string(out)) != "bar" {
-		t.Errorf("expected output 'bar', got '%s'", string(out))
-	}
-}
-
-func Test_runE_TemplateFileNotFound(t *testing.T) {
-	inputContent = "foo: bar"
-	defer func() { inputContent = "" }()
-	cmd := newTestCmd("notfound.tmpl")
-	err := runE(cmd, []string{"notfound.tmpl"})
-	if err == nil || !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("expected file not found error, got: %v", err)
+	got := string(bytes.TrimSpace(out))
+	want := "Hello Alice"
+	if got != want {
+		t.Errorf("output = %q; want %q", got, want)
 	}
 }
 
-func Test_runE_EmptyInputContent(t *testing.T) {
-	inputContent = ""
-	defer func() { inputContent = "" }()
-	cmd := newTestCmd("file.tmpl")
-	err := runE(cmd, []string{"file.tmpl"})
-	if err == nil || !strings.Contains(err.Error(), "no data provided") {
-		t.Errorf("expected error for empty input content, got: %v", err)
-	}
-}
+func TestRunE_DataFileArg_Success(t *testing.T) {
+	origContent := inputContent
+	origSchema := inputSchemaFile
+	t.Cleanup(func() {
+		inputContent = origContent
+		inputSchemaFile = origSchema
+	})
 
-func Test_runE_FileArgInput(t *testing.T) {
-	// Create YAML data file
-	dataFile, err := os.CreateTemp("", "data.yaml")
-	if err != nil {
+	// create template
+	tmplFile := filepath.Join(t.TempDir(), "tmpl.txt")
+	if err := os.WriteFile(tmplFile, []byte("Age: {{.Age}}"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(dataFile.Name())
-	dataFile.WriteString("foo: filebar")
-	dataFile.Close()
-
-	// Create template file
-	tmplFile, err := os.CreateTemp("", "tmpl")
-	if err != nil {
+	// create data file
+	dataFile := filepath.Join(t.TempDir(), "data.yml")
+	if err := os.WriteFile(dataFile, []byte("Age: 30"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmplFile.Name())
-	tmplFile.WriteString("{{.foo}}")
-	tmplFile.Close()
 
-	oldStdout := os.Stdout
+	// capture stdout
+	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	cmd := newTestCmd(tmplFile.Name(), dataFile.Name())
-	err = runE(cmd, []string{tmplFile.Name(), dataFile.Name()})
-
+	err := runE(nil, []string{tmplFile, dataFile})
 	w.Close()
-	os.Stdout = oldStdout
 	out, _ := io.ReadAll(r)
+	os.Stdout = origStdout
 
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Fatalf("runE returned error: %v", err)
 	}
-	if strings.TrimSpace(string(out)) != "filebar" {
-		t.Errorf("expected output 'filebar', got '%s'", string(out))
+	got := string(bytes.TrimSpace(out))
+	want := "Age: 30"
+	if got != want {
+		t.Errorf("output = %q; want %q", got, want)
 	}
 }
 
-func Test_CLI_Execute_WithInputContentFlag(t *testing.T) {
-	// Create template file
-	tmplFile, err := os.CreateTemp("", "tmpl")
-	if err != nil {
+func TestRunE_ExplicitStdin_Success(t *testing.T) {
+	origContent := inputContent
+	origSchema := inputSchemaFile
+	origStdin := os.Stdin
+	t.Cleanup(func() {
+		inputContent = origContent
+		inputSchemaFile = origSchema
+		os.Stdin = origStdin
+	})
+
+	// create template
+	tmplFile := filepath.Join(t.TempDir(), "tmpl.txt")
+	if err := os.WriteFile(tmplFile, []byte("User: {{.User}}"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmplFile.Name())
-	tmplFile.WriteString("{{.foo}}")
-	tmplFile.Close()
+	// prepare stdin
+	rIn, wIn, _ := os.Pipe()
+	wIn.Write([]byte("User: Bob"))
+	wIn.Close()
+	os.Stdin = rIn
 
-	// Save and restore os.Args
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	// capture stdout
+	origStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
 
-	os.Args = []string{"simplate", "-c", "foo: cli", tmplFile.Name()}
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err = Execute()
-
-	w.Close()
-	os.Stdout = oldStdout
-	out, _ := io.ReadAll(r)
+	err := runE(nil, []string{tmplFile, "-"})
+	wOut.Close()
+	out, _ := io.ReadAll(rOut)
+	os.Stdout = origStdout
 
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Fatalf("runE returned error: %v", err)
 	}
-	if strings.TrimSpace(string(out)) != "cli" {
-		t.Errorf("expected output 'cli', got '%s'", string(out))
+	got := string(bytes.TrimSpace(out))
+	want := "User: Bob"
+	if got != want {
+		t.Errorf("output = %q; want %q", got, want)
 	}
 }
