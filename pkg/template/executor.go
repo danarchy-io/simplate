@@ -1,4 +1,4 @@
-package executor
+package template
 
 import (
 	"fmt"
@@ -14,7 +14,48 @@ var funcMap = template.FuncMap{
 	"env": os.Getenv,
 }
 
+type InputProvider func() (any, error)
 type ValidateInputFunc func(input any) error
+
+// AnyProvider returns an InputProvider that simply wraps the given Go value.
+// When the returned provider is invoked, it returns the original input value.
+// If the input is nil, the provider returns an error instead.
+// This is useful when you already have a Go value as input and don’t need to
+// unmarshal from YAML or JSON.
+//
+// Example:
+//
+//	provider := AnyProvider(map[string]interface{}{"foo": "bar"})
+//	data, err := provider()
+//	// data == map[string]interface{}{"foo":"bar"}, err == nil
+func AnyProvider(input any) InputProvider {
+	return func() (any, error) {
+		if input == nil {
+			return nil, fmt.Errorf("input is nil")
+		}
+		return input, nil
+	}
+}
+
+// YamlProvider returns an InputProvider that unmarshals the provided YAML bytes
+// into a Go data structure (map[string]interface{} for objects or []interface{} for arrays).
+// When the returned provider is invoked, it parses the YAML input and returns
+// the resulting data or an error if unmarshalling fails.
+//
+// Example:
+//
+//	provider := YamlProvider([]byte("foo: bar\nbaz:\n  - qux\n"))
+//	data, err := provider()
+//	// data == map[string]interface{}{"foo":"bar","baz":[]interface{}{"qux"}}, err == nil
+func YamlProvider(input []byte) InputProvider {
+	return func() (any, error) {
+		var data any
+		if err := yaml.Unmarshal(input, &data); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal YAML input: %w", err)
+		}
+		return data, nil
+	}
+}
 
 // WithJsonSchemaValidation returns a ValidateInputFunc that validates
 // a parsed YAML input (the result of yaml.Unmarshal) against the
@@ -49,12 +90,11 @@ func WithJsonSchemaValidation(schema []byte) ValidateInputFunc {
 //  2. any validation function
 //  3. parsing the template
 //  4. executing the template
-func Execute(input []byte, templ []byte, output io.Writer, validateInputFuncs ...ValidateInputFunc) error {
+func Execute(inputProvider InputProvider, templ []byte, output io.Writer, validateInputFuncs ...ValidateInputFunc) error {
 
-	var data any
-	err := yaml.Unmarshal(input, &data)
+	data, err := inputProvider()
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal YAML input: %w", err)
+		return fmt.Errorf("failed to get input data: %w", err)
 	}
 
 	for _, validateFunc := range validateInputFuncs {

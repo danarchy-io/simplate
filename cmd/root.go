@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/danarchy-io/simplate/pkg/executor"
+	"github.com/danarchy-io/simplate/pkg/template"
 	"github.com/spf13/cobra"
 )
 
@@ -98,9 +98,9 @@ func runE(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to read schema file '%v': %w", inputSchemaFile, err)
 		}
-		return executor.Execute(dataBytes, templateBytes, os.Stdout,
-			executor.WithJsonSchemaValidation(inputSchemaBytes))
+		return template.Execute(template.YamlProvider(dataBytes), templateBytes, os.Stdout,
+			template.WithJsonSchemaValidation(inputSchemaBytes))
 	}
 
-	return executor.Execute(dataBytes, templateBytes, os.Stdout)
+	return template.Execute(template.YamlProvider(dataBytes), templateBytes, os.Stdout)
 }

@@ -1,7 +1,8 @@
-package executor
+package template
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 )
 
@@ -48,7 +49,7 @@ func TestExecute_InvalidYAML(t *testing.T) {
 	input := []byte("key: : bad")
 	tmpl := []byte("{{.key}}")
 	var out bytes.Buffer
-	if err := Execute(input, tmpl, &out); err == nil {
+	if err := Execute(YamlProvider(input), tmpl, &out); err == nil {
 		t.Fatal("expected YAML unmarshal error, got nil")
 	}
 }
@@ -57,7 +58,7 @@ func TestExecute_NoValidation_Success(t *testing.T) {
 	input := []byte("greeting: Hello\nname: World")
 	tmpl := []byte("{{.greeting}}, {{.name}}!")
 	var out bytes.Buffer
-	if err := Execute(input, tmpl, &out); err != nil {
+	if err := Execute(YamlProvider(input), tmpl, &out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := out.String()
@@ -77,7 +78,7 @@ func TestExecute_WithValidation_Success(t *testing.T) {
 		"required":["foo"]
 	}`)
 	validate := WithJsonSchemaValidation(schema)
-	if err := Execute(input, tmpl, &out, validate); err != nil {
+	if err := Execute(YamlProvider(input), tmpl, &out, validate); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := out.String()
@@ -97,7 +98,7 @@ func TestExecute_WithValidation_Failure(t *testing.T) {
 		"required":["foo"]
 	}`)
 	validate := WithJsonSchemaValidation(schema)
-	if err := Execute(input, tmpl, &out, validate); err == nil {
+	if err := Execute(YamlProvider(input), tmpl, &out, validate); err == nil {
 		t.Fatal("expected validation failure, got nil")
 	}
 }
@@ -107,7 +108,42 @@ func TestExecute_BadTemplate(t *testing.T) {
 	// missing closing brace
 	tmpl := []byte("{{.key")
 	var out bytes.Buffer
-	if err := Execute(input, tmpl, &out); err == nil {
+	if err := Execute(YamlProvider(input), tmpl, &out); err == nil {
 		t.Fatal("expected template parse error, got nil")
+	}
+}
+
+// TestAnyProvider_Success verifies that AnyProvider returns the original value.
+func TestAnyProvider_Success(t *testing.T) {
+	input := map[string]interface{}{"foo": "bar"}
+	provider := AnyProvider(input)
+	got, err := provider()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !reflect.DeepEqual(got, input) {
+		t.Errorf("expected %v, got %v", input, got)
+	}
+}
+
+// TestAnyProvider_Nil verifies that AnyProvider(nil) returns an error.
+func TestAnyProvider_Nil(t *testing.T) {
+	provider := AnyProvider(nil)
+	if _, err := provider(); err == nil {
+		t.Fatal("expected error for nil input, got nil")
+	}
+}
+
+// TestExecute_WithAnyProvider ensures Execute works with AnyProvider.
+func TestExecute_WithAnyProvider(t *testing.T) {
+	data := map[string]interface{}{"greeting": "Hi", "name": "Tester"}
+	tmpl := []byte("{{.greeting}} {{.name}}")
+	var out bytes.Buffer
+	if err := Execute(AnyProvider(data), tmpl, &out); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "Hi Tester"
+	if got := out.String(); got != want {
+		t.Errorf("expected %q, got %q", want, got)
 	}
 }
