@@ -142,5 +142,7 @@ func Execute(
 
 - Templates should conform to the Go `text/template` format.
   - You can access the values of environment variables using the `env` function, like this: `{{ env "HOME" }}`.
+  - You can access an environment variable with a fallback using `envOrDefault`, e.g. `{{ envOrDefault "LOG_LEVEL" "info" }}`.
+  - You can remove duplicate elements from a slice (preserving order) using `unique`, e.g. `{{ unique .items }}`.
 - YAML input should be properly structured and optionally validated using a JSON Schema.
 - Use `-` to read input from stdin if the second positional argument is not provided.

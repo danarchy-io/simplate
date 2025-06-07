@@ -10,10 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var funcMap = template.FuncMap{
-	"env": os.Getenv,
-}
-
 type InputProvider func() (any, error)
 type ValidateInputFunc func(input any) error
 
@@ -103,7 +99,11 @@ func Execute(inputProvider InputProvider, templ []byte, output io.Writer, valida
 		}
 	}
 
-	tmpl, err := template.New("generator").Funcs(funcMap).Parse(string(templ))
+	tmpl, err := template.New("generator").Funcs(template.FuncMap{
+		"env":          os.Getenv,
+		"envOrDefault": envOrDefault,
+		"unique":       unique,
+	}).Parse(string(templ))
 	if err != nil {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
