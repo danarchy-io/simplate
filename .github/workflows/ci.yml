@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+jobs:
+  test:
+    name: Run Go Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Run tests with coverage
+      run: |
+        go test -coverprofile=coverage.out -covermode=atomic ./... -timeout 2m
+
+    - name: Check total coverage
+      run: |
+        total=$(go tool cover -func=coverage.out \
+          | grep total \
+          | awk '{print substr($3,1,length($3)-1)}')
+        echo "Total coverage: $total%"
+        if (( $(echo "$total < 90" | bc -l) )); then
+          echo "ERROR: coverage below 90%"; exit 1
+        fi
