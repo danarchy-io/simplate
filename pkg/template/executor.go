@@ -1,6 +1,7 @@
 package template
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -110,3 +111,113 @@ func Execute(inputProvider InputProvider, templ []byte, output io.Writer, valida
 
 	return tmpl.Execute(output, data)
 }
+
+// ExecuteWithFiles parses the given template for FILE directives, validates input,
+// and renders segments to either stdout or files based on the directives.
+//
+// This function extends Execute() with multi-file generation support using FILE
+// directive markers in the template:
+//
+//	#FILE:filename.txt#
+//	content for this file
+//	#FILE#
+//
+// Parameters:
+//   - inputProvider: provider function that returns the input data
+//   - templ: Go text/template source as bytes, may contain FILE directives
+//   - output: destination io.Writer for stdout segments (content outside FILE blocks)
+//   - fileWriter: FileWriter implementation for writing file segments
+//   - validateInputFuncs: zero or more validation functions (ValidateInputFunc)
+//     which are invoked on the unmarshaled data before rendering.
+//
+// Features:
+//   - Filenames can contain template expressions (e.g., #FILE:output-{{.id}}.txt#)
+//   - Each FILE block is rendered as an independent template with full data access
+//   - Content outside FILE blocks is rendered to the output writer
+//   - Parent directories are automatically created for file paths
+//   - Templates without FILE directives work identically to Execute()
+//
+// It returns an error if any of the following steps fail:
+//  1. Getting input data from the provider
+//  2. Any validation function
+//  3. Parsing FILE directives (malformed syntax, unclosed blocks, etc.)
+//  4. Parsing or executing templates (for filenames or content)
+//  5. Writing files
+func ExecuteWithFiles(
+	inputProvider InputProvider,
+	templ []byte,
+	output io.Writer,
+	fileWriter FileWriter,
+	validateInputFuncs ...ValidateInputFunc,
+) error {
+	// Get input data
+	data, err := inputProvider()
+	if err != nil {
+		return fmt.Errorf("failed to get input data: %w", err)
+	}
+
+	// Run validation functions
+	for _, validateFunc := range validateInputFuncs {
+		if err := validateFunc(data); err != nil {
+			return fmt.Errorf("input validation failed: %w", err)
+		}
+	}
+
+	// Parse template into segments
+	segments, err := ParseSegments(templ)
+	if err != nil {
+		return fmt.Errorf("failed to parse template segments: %w", err)
+	}
+
+	// Process each segment
+	for i, segment := range segments {
+		switch segment.Type {
+		case SegmentStdout:
+			// Render stdout segment
+			if err := renderSegment(segment.Content, data, output); err != nil {
+				return fmt.Errorf("failed to render stdout segment %d: %w", i, err)
+			}
+
+		case SegmentFile:
+			// Render filename template
+			var filenameBuf bytes.Buffer
+			if err := renderSegment(segment.Filename, data, &filenameBuf); err != nil {
+				return fmt.Errorf("failed to render filename template for segment %d: %w", i, err)
+			}
+			filename := filenameBuf.String()
+
+			// Render file content template
+			var contentBuf bytes.Buffer
+			if err := renderSegment(segment.Content, data, &contentBuf); err != nil {
+				return fmt.Errorf("failed to render file content for %s: %w", filename, err)
+			}
+
+			// Write file
+			if err := fileWriter.WriteFile(filename, contentBuf.Bytes()); err != nil {
+				return fmt.Errorf("failed to write file %s: %w", filename, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// renderSegment parses and executes a template segment with the given data,
+// writing the result to the provided writer.
+func renderSegment(templateContent []byte, data any, output io.Writer) error {
+	tmpl, err := template.New("segment").Funcs(template.FuncMap{
+		"env":          os.Getenv,
+		"envOrDefault": envOrDefault,
+		"unique":       unique,
+	}).Parse(string(templateContent))
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	if err := tmpl.Execute(output, data); err != nil {
+		return fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return nil
+}
+
