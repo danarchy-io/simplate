@@ -93,14 +93,17 @@ func runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read template file '%s': %w", templateFile, err)
 	}
 
+	// Create file writer for FILE directive support
+	fileWriter := &template.DefaultFileWriter{}
+
 	if inputSchemaFile != "" {
 		inputSchemaBytes, err := os.ReadFile(inputSchemaFile)
 		if err != nil {
 			return fmt.Errorf("failed to read schema file '%v': %w", inputSchemaFile, err)
 		}
-		return template.Execute(template.YamlProvider(dataBytes), templateBytes, os.Stdout,
+		return template.ExecuteWithFiles(template.YamlProvider(dataBytes), templateBytes, os.Stdout, fileWriter,
 			template.WithJsonSchemaValidation(inputSchemaBytes))
 	}
 
-	return template.Execute(template.YamlProvider(dataBytes), templateBytes, os.Stdout)
+	return template.ExecuteWithFiles(template.YamlProvider(dataBytes), templateBytes, os.Stdout, fileWriter)
 }

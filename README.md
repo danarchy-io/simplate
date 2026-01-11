@@ -138,6 +138,138 @@ func Execute(
 - output: any io.Writer
 - validateFuncs: zero or more ValidateInputFunc (e.g. WithJsonSchemaValidation(schemaBytes))
 
+## Multi-File Generation with FILE Directives
+
+Simplate supports generating multiple files from a single template using FILE directives. This allows you to create complex output structures with one command.
+
+### FILE Directive Syntax
+
+Use the `#FILE:filename#` and `#FILE#` markers to define file sections:
+
+```
+#FILE:filename.txt#
+content for this file
+#FILE#
+```
+
+### Features
+
+- **Template-rendered filenames**: Filenames can contain template expressions
+  ```
+  #FILE:config-{{.environment}}.yml#
+  ```
+- **Multiple files**: Define as many FILE blocks as needed
+- **Nested directories**: Parent directories are created automatically
+  ```
+  #FILE:logs/{{.name}}/output.log#
+  ```
+- **Mixed output**: Content outside FILE blocks goes to stdout
+- **Full template support**: Each FILE block has access to all template data and functions
+
+### Example
+
+Template (`config.tmpl`):
+```
+Generated at {{.timestamp}}
+
+#FILE:config-{{.environment}}.yml#
+server:
+  name: {{.name}}
+  port: {{.port}}
+#FILE#
+
+#FILE:logs/{{.name}}.log#
+Application: {{.name}}
+Started: {{.timestamp}}
+#FILE#
+
+Summary: Configuration created for {{.name}}
+```
+
+Data (`data.yaml`):
+```yaml
+name: api-service
+environment: production
+port: 8080
+timestamp: 2025-01-11T10:00:00Z
+```
+
+Running:
+```bash
+simplate config.tmpl data.yaml
+```
+
+**Output to stdout:**
+```
+Generated at 2025-01-11T10:00:00Z
+
+
+
+Summary: Configuration created for api-service
+```
+
+**Files created:**
+- `config-production.yml` - Server configuration
+- `logs/api-service.log` - Log file (directory created automatically)
+
+## Library Usage with Multi-File Generation
+
+Use `ExecuteWithFiles` for FILE directive support:
+
+```go
+import (
+    "bytes"
+    "github.com/danarchy-io/simplate/pkg/template"
+)
+
+func main() {
+    inputYAML := []byte(`name: myapp`)
+
+    tmplSrc := []byte(`#FILE:{{.name}}.conf#
+app_name={{.name}}
+#FILE#`)
+
+    var stdout bytes.Buffer
+    fileWriter := &template.DefaultFileWriter{}
+
+    err := template.ExecuteWithFiles(
+        template.YamlProvider(inputYAML),
+        tmplSrc,
+        &stdout,
+        fileWriter,
+    )
+    // Creates file: myapp.conf
+}
+```
+
+For testing, use `MemoryFileWriter`:
+
+```go
+memWriter := &template.MemoryFileWriter{Files: make(map[string][]byte)}
+
+err := template.ExecuteWithFiles(
+    template.YamlProvider(inputYAML),
+    tmplSrc,
+    &stdout,
+    memWriter,
+)
+
+// Access files in memory
+content := memWriter.Files["myapp.conf"]
+```
+
+Function signature:
+
+```go
+func ExecuteWithFiles(
+    inputProvider InputProvider,
+    templ         []byte,
+    output        io.Writer,
+    fileWriter    FileWriter,
+    validateFuncs ...ValidateInputFunc,
+) error
+```
+
 ## Notes
 
 - Templates should conform to the Go `text/template` format.
@@ -146,3 +278,5 @@ func Execute(
   - You can remove duplicate elements from a slice (preserving order) using `unique`, e.g. `{{ unique .items }}`.
 - YAML input should be properly structured and optionally validated using a JSON Schema.
 - Use `-` to read input from stdin if the second positional argument is not provided.
+- FILE directives cannot be nested.
+- Filenames are sanitized to prevent path traversal attacks (e.g., `../` is rejected).
