@@ -12,6 +12,7 @@ import (
 var (
 	inputContent    string
 	inputSchemaFile string
+	appVersion      = "dev"
 
 	rootCmd = &cobra.Command{
 		Use:   "simplate [flags] [--] <template-file> [input-file | -]",
@@ -22,16 +23,29 @@ template and produce the final output.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: runE,
 	}
+
+	versionCmd = &cobra.Command{
+		Use:   "version",
+		Short: "Print the version number",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("simplate version %s\n", appVersion)
+		},
+	}
 )
 
 func init() {
 
 	rootCmd.Flags().StringVarP(&inputContent, "input-content", "c", "", "Input content")
 	rootCmd.Flags().StringVarP(&inputSchemaFile, "input-schema-file", "s", "", "Input jsonschema file")
+	rootCmd.AddCommand(versionCmd)
 }
 
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+func SetVersion(v string) {
+	appVersion = v
 }
 
 func runE(cmd *cobra.Command, args []string) error {

@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-upload:
+    name: Build and Upload Release Assets
+    if: github.event.release.target_commitish == 'main'
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: 0
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          go build -ldflags="-s -w -X main.version=${VERSION}" -o simplate .
+
+      - name: Create release directory
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          ARCH=${{ matrix.arch }}
+          DIR="simplate-${VERSION}-linux-${ARCH}"
+          mkdir -p ${DIR}
+          cp simplate ${DIR}/
+          cp README.md ${DIR}/
+          [ -f LICENSE ] && cp LICENSE ${DIR}/ || true
+          chmod +x ${DIR}/simplate
+
+      - name: Create tar.gz archive
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          ARCH=${{ matrix.arch }}
+          DIR="simplate-${VERSION}-linux-${ARCH}"
+          tar -czf ${DIR}.tar.gz ${DIR}
+
+      - name: Upload artifact for checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: simplate-${{ github.event.release.tag_name }}-linux-${{ matrix.arch }}
+          path: simplate-${{ github.event.release.tag_name }}-linux-${{ matrix.arch }}.tar.gz
+          retention-days: 1
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./simplate-${{ github.event.release.tag_name }}-linux-${{ matrix.arch }}.tar.gz
+          asset_name: simplate-${{ github.event.release.tag_name }}-linux-${{ matrix.arch }}.tar.gz
+          asset_content_type: application/gzip
+
+  checksums:
+    name: Generate and Upload Checksums
+    needs: build-and-upload
+    runs-on: ubuntu-latest
+    if: github.event.release.target_commitish == 'main'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Move artifacts to current directory
+        run: |
+          find artifacts -name "*.tar.gz" -exec mv {} . \;
+
+      - name: Generate SHA256SUMS
+        run: |
+          sha256sum *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload SHA256SUMS to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./SHA256SUMS
+          asset_name: SHA256SUMS
+          asset_content_type: text/plain
