@@ -52,8 +52,9 @@ simplate [flags] [--] <template-file> [input-file | -]
 
 ## Optional Flags
 
-- `--input-content`: Pass YAML input directly as a string instead of a file.
-- `--input-schema-file`: Specify a [JSON Schema](https://json-schema.org/) file to validate the input YAML.
+- `--input-content` or `-c`: Pass YAML input directly as a string instead of a file.
+- `--input-schema-file` or `-s`: Specify a [JSON Schema](https://json-schema.org/) file to validate the input YAML.
+- `--output-dir` or `-o`: Specify output directory for FILE directives (default: current directory).
 
 ## Description
 
@@ -241,6 +242,23 @@ Summary: Configuration created for api-service
 **Files created:**
 - `config-production.yml` - Server configuration
 - `logs/api-service.log` - Log file (directory created automatically)
+
+### Using Output Directory
+
+Specify where generated files should be written:
+
+```bash
+# Write all files to ./build directory
+simplate --output-dir build config.tmpl data.yaml
+
+# Short form
+simplate -o ./dist config.tmpl data.yaml
+
+# Nested paths in FILE directives are relative to output dir
+# #FILE:config/app.yml# will write to build/config/app.yml
+```
+
+The output directory will be created automatically if it doesn't exist. All FILE directive paths are treated as relative to this directory.
 
 ## Library Usage with Multi-File Generation
 

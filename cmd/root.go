@@ -12,6 +12,7 @@ import (
 var (
 	inputContent    string
 	inputSchemaFile string
+	outputDir       string
 	appVersion      = "dev"
 
 	rootCmd = &cobra.Command{
@@ -37,6 +38,7 @@ func init() {
 
 	rootCmd.Flags().StringVarP(&inputContent, "input-content", "c", "", "Input content")
 	rootCmd.Flags().StringVarP(&inputSchemaFile, "input-schema-file", "s", "", "Input jsonschema file")
+	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for FILE directives (default: current directory)")
 	rootCmd.AddCommand(versionCmd)
 }
 
@@ -109,6 +111,13 @@ func runE(cmd *cobra.Command, args []string) error {
 
 	// Create file writer for FILE directive support
 	fileWriter := &template.DefaultFileWriter{}
+
+	// Set output directory if provided
+	if outputDir != "" {
+		if err := fileWriter.SetBaseDir(outputDir); err != nil {
+			return fmt.Errorf("invalid output directory: %w", err)
+		}
+	}
 
 	if inputSchemaFile != "" {
 		inputSchemaBytes, err := os.ReadFile(inputSchemaFile)

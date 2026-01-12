@@ -242,3 +242,134 @@ func TestDefaultFileWriter_Overwrite(t *testing.T) {
 		t.Errorf("expected content 'second', got %q", content)
 	}
 }
+
+func TestDefaultFileWriter_WithBaseDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	baseDir := filepath.Join(tmpDir, "output")
+
+	writer := &DefaultFileWriter{}
+	err := writer.SetBaseDir(baseDir)
+	if err != nil {
+		t.Fatalf("unexpected error setting base dir: %v", err)
+	}
+
+	// Write a file relative to base dir
+	filename := "test.txt"
+	err = writer.WriteFile(filename, []byte("content"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify file was created in base directory
+	expectedPath := filepath.Join(baseDir, filename)
+	content, err := os.ReadFile(expectedPath)
+	if err != nil {
+		t.Fatalf("failed to read file at expected path %s: %v", expectedPath, err)
+	}
+
+	if string(content) != "content" {
+		t.Errorf("expected content 'content', got %q", content)
+	}
+}
+
+func TestDefaultFileWriter_WithBaseDir_NestedPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	baseDir := filepath.Join(tmpDir, "output")
+
+	writer := &DefaultFileWriter{}
+	err := writer.SetBaseDir(baseDir)
+	if err != nil {
+		t.Fatalf("unexpected error setting base dir: %v", err)
+	}
+
+	// Write a file with nested path
+	filename := "subdir/nested/test.txt"
+	err = writer.WriteFile(filename, []byte("nested content"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify file was created in correct location
+	expectedPath := filepath.Join(baseDir, filename)
+	content, err := os.ReadFile(expectedPath)
+	if err != nil {
+		t.Fatalf("failed to read file at expected path %s: %v", expectedPath, err)
+	}
+
+	if string(content) != "nested content" {
+		t.Errorf("expected content 'nested content', got %q", content)
+	}
+}
+
+func TestDefaultFileWriter_BaseDir_PathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	baseDir := filepath.Join(tmpDir, "safe")
+
+	writer := &DefaultFileWriter{}
+	err := writer.SetBaseDir(baseDir)
+	if err != nil {
+		t.Fatalf("unexpected error setting base dir: %v", err)
+	}
+
+	// Try path traversal with base dir set
+	err = writer.WriteFile("../escape.txt", []byte("bad"))
+	if err == nil {
+		t.Fatal("expected error for path traversal, got nil")
+	}
+	if !contains(err.Error(), "path traversal") {
+		t.Errorf("expected 'path traversal' error, got: %v", err)
+	}
+}
+
+func TestDefaultFileWriter_BaseDir_InvalidPath(t *testing.T) {
+	writer := &DefaultFileWriter{}
+
+	// Try to set a file as base dir
+	tmpFile, err := os.CreateTemp("", "testfile")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	err = writer.SetBaseDir(tmpFile.Name())
+	if err == nil {
+		t.Fatal("expected error when setting file as base dir, got nil")
+	}
+	if !contains(err.Error(), "not a directory") {
+		t.Errorf("expected 'not a directory' error, got: %v", err)
+	}
+}
+
+func TestMemoryFileWriter_WithBaseDir(t *testing.T) {
+	writer := &MemoryFileWriter{Files: make(map[string][]byte)}
+	err := writer.SetBaseDir("output")
+	if err != nil {
+		t.Fatalf("unexpected error setting base dir: %v", err)
+	}
+
+	// Write a file
+	err = writer.WriteFile("test.txt", []byte("content"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify file is stored with base dir prefix
+	expectedKey := filepath.Join("output", "test.txt")
+	content, exists := writer.Files[expectedKey]
+	if !exists {
+		t.Fatalf("expected file at key %q, but not found. Keys: %v", expectedKey, mapKeys(writer.Files))
+	}
+
+	if string(content) != "content" {
+		t.Errorf("expected content 'content', got %q", content)
+	}
+}
+
+func mapKeys(m map[string][]byte) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
