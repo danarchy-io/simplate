@@ -4,6 +4,33 @@
 
 ## Installation
 
+### Download Pre-built Binary
+
+Download the latest release for your architecture from the [releases page](https://github.com/danarchy-io/simplate/releases):
+
+```bash
+# For Linux amd64
+VERSION=v1.0.0  # Replace with the latest version
+ARCH=amd64      # Or arm64
+
+# Download binary and checksums
+wget https://github.com/danarchy-io/simplate/releases/download/${VERSION}/simplate-${VERSION}-linux-${ARCH}.tar.gz
+wget https://github.com/danarchy-io/simplate/releases/download/${VERSION}/SHA256SUMS
+
+# Verify checksum
+sha256sum -c SHA256SUMS --ignore-missing
+
+# Extract and use
+tar -xzf simplate-${VERSION}-linux-${ARCH}.tar.gz
+cd simplate-${VERSION}-linux-${ARCH}
+./simplate --version
+
+# Optionally, move to PATH
+sudo mv simplate /usr/local/bin/
+```
+
+### Go Install (from source)
+
 ```bash
 go install github.com/danarchy-io/simplate@latest
 ```
