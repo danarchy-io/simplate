@@ -1,5 +1,8 @@
 # Simplate CLI
 
+[![CI](https://github.com/danarchy-io/simplate/workflows/CI/badge.svg)](https://github.com/danarchy-io/simplate/actions?query=workflow%3ACI)
+[![Release](https://github.com/danarchy-io/simplate/workflows/Release/badge.svg)](https://github.com/danarchy-io/simplate/actions?query=workflow%3ARelease)
+
 **Simplate** is a simple, YAML-powered template engine written in Go. It uses Go's `text/template` system to process templates with YAML input, making it easy to generate content dynamically.
 
 ## Installation
@@ -296,6 +299,58 @@ func ExecuteWithFiles(
     validateFuncs ...ValidateInputFunc,
 ) error
 ```
+
+## Development
+
+### Running Tests
+
+All pull requests must pass unit tests before merging. The CI workflow automatically runs tests on:
+- Go 1.24.3 (project version)
+- Go 1.24.x (latest patch)
+
+To run tests locally:
+
+```bash
+# Run all tests
+go test ./... -v
+
+# Run tests with race detection and coverage
+go test ./... -race -coverprofile=coverage.out -covermode=atomic
+
+# View coverage report
+go tool cover -html=coverage.out
+
+# Display coverage summary
+go tool cover -func=coverage.out
+```
+
+### Building
+
+```bash
+# Build the binary
+go build -v .
+
+# Build with version information
+go build -ldflags="-X main.version=v1.0.0" -o simplate .
+
+# Run the binary
+./simplate version
+```
+
+### Continuous Integration
+
+The project uses GitHub Actions for automated testing and releases:
+
+- **CI Workflow**: Runs on all pull requests to main
+  - Executes unit tests with race detection
+  - Builds binary to verify compilation
+  - Generates coverage reports
+  - Tests on multiple Go versions
+
+- **Release Workflow**: Triggers on GitHub releases
+  - Builds static binaries for Linux (amd64, arm64)
+  - Generates SHA256 checksums
+  - Uploads release artifacts
 
 ## Notes
 
